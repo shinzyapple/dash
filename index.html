@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- APIキー設定オーバーレイ（初回起動時のみ表示） -->
+    <div id="api-setup" class="overlay hidden">
+        <div class="setup-box">
+            <h2>API初期設定</h2>
+            <p>GitHubへの漏洩を防ぐため、キー情報をブラウザに保存します。</p>
+            <input type="text" id="key-switchbot" placeholder="SwitchBot API Token">
+            <input type="text" id="key-switchbot-secret" placeholder="SwitchBot Client Secret">
+            <input type="text" id="key-switchbot-device" placeholder="エアコンのデバイスID">
+            <input type="text" id="key-openweather" placeholder="OpenWeatherMap API Key">
+            <input type="text" id="key-gemini" placeholder="Gemini API Key">
+            <button id="save-keys-btn">設定を保存して起動</button>
+        </div>
+    </div>
+
+    <!-- メインコンテナ -->
+    <div id="dashboard" class="dashboard-container">
+        
+        <!-- 左半分：時計とニュース（タップでエアコン画面へ） -->
+        <div id="left-section" class="clickable-section">
+            <div class="clock-area">
+                <div id="date-display" class="date-text">--月--日(--)</div>
+                <div id="time-display" class="time-text">00:00</div>
+            </div>
+            <hr class="divider">
+            <div class="news-area">
+                <ul id="news-list">
+                    <li>ニュースを読み込み中...</li>
+                    <li>--</li>
+                    <li>--</li>
+                    <li>--</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 垂直区切り線 -->
+        <div class="v-divider"></div>
+
+        <!-- 右半分：天気情報 -->
+        <div id="right-section">
+            <!-- 今日の天気 -->
+            <div class="today-weather">
+                <div class="weather-header">
+                    <span id="today-date">--/--</span>
+                    <span id="today-icon" class="weather-icon">☀️</span>
+                    <span id="today-max-temp" class="temp-max">--</span>
+                    <span id="today-min-temp" class="temp-min">--</span>
+                </div>
+                <div id="current-status" class="current-status">現在: --°C --%</div>
+                <div id="ai-advice" class="ai-advice">
+                    AIアドバイスを生成中...
+                </div>
+            </div>
+
+            <hr class="divider">
+
+            <!-- 予報エリア（3日分 / 3時間ごと / 1週間分 切り替え可能） -->
+            <div class="forecast-area">
+                <div class="forecast-tabs">
+                    <button id="tab-3days" class="active">3日分</button>
+                    <button id="tab-3hours">3時間ごと</button>
+                    <button id="tab-weekly">1週間</button>
+                </div>
+                <div id="forecast-list" class="forecast-list">
+                    <!-- JSで動的に生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- エアコン操作画面（モーダルオーバレイとして実装し、背景UIを維持） -->
+    <div id="aircon-screen" class="overlay hidden">
+        <div class="aircon-container">
+            <button id="close-aircon" class="back-btn">❌ 戻る</button>
+            
+            <div class="aircon-display">
+                <div class="aircon-title">エアコン遠隔操作</div>
+                <div id="target-temp" class="target-temp">26°C</div>
+                <div id="aircon-status-text" class="status-sub">運転状態: --</div>
+            </div>
+
+            <div class="aircon-controls">
+                <button id="btn-power" class="ctrl-btn power-off">電源 ON/OFF</button>
+                
+                <div class="temp-adjust">
+                    <button id="btn-temp-up" class="ctrl-btn">温度 ▲</button>
+                    <button id="btn-temp-down" class="ctrl-btn">温度 ▼</button>
+                </div>
+
+                <!-- セレクトボタン（1つにまとめる形式） -->
+                <div class="select-wrapper">
+                    <button id="btn-mode-select" class="ctrl-btn dropdown-toggle">モード: 自動 ▾</button>
+                    <div id="mode-options" class="dropdown-menu hidden">
+                        <div data-value="冷房">冷房</div>
+                        <div data-value="暖房">暖房</div>
+                        <div data-value="除湿">除湿</div>
+                        <div data-value="自動">自動</div>
+                    </div>
+                </div>
+
+                <div class="select-wrapper">
+                    <button id="btn-fan-select" class="ctrl-btn dropdown-toggle">風量: 自動 ▾</button>
+                    <div id="fan-options" class="dropdown-menu hidden">
+                        <div data-value="自動">自動</div>
+                        <div data-value="1">1</div>
+                        <div data-value="2">2</div>
+                        <div data-value="3">3</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 画面焼け防止用の暗転レイヤー（スクリーンセーバー） -->
+    <div id="screensaver" class="screensaver-layer hidden">
+        <div id="saver-clock" class="saver-clock">00:00</div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
