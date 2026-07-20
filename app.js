@@ -40,7 +40,7 @@ document.getElementById("save-keys-btn").addEventListener("click", () => {
         switchbotSecret: document.getElementById("key-switchbot-secret").value,
         switchbotDevice: document.getElementById("key-switchbot-device").value,
         openweather: document.getElementById("key-openweather").value,
-        news: document.getElementById("key-news").value,
+        // key-news は不要になったため削除（またはHTMLに存在しない場合はここに書かない）
         gemini: document.getElementById("key-gemini").value,
     };
     localStorage.setItem("smart_dashboard_keys", JSON.stringify(API_KEYS));
