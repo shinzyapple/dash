@@ -184,24 +184,17 @@ async function fetchGeminiAdvice(todayWeather) {
 async function fetchNews() {
     try {
         const yahooRssUrl = "https://news.yahoo.co.jp/rss/topics/top-picks.xml";
-        
-        // 対策①: 別の安定したCORSプロキシ（yacdn.org）を使用してみる
-        // このプロキシはレスポンスに正しくCORSヘッダーを付与してくれます
         const proxyUrl = `https://api.yacdn.org/proxy?url=${encodeURIComponent(yahooRssUrl)}`;
         
         const res = await fetch(proxyUrl);
-        if (!res.ok) throw new Error("プロキシサーバーのエラーです");
+        if (!res.ok) throw new Error("プロキシサーバーのエラー");
         
-        // 文字列としてXMLを取得
         const xmlString = await res.text();
-        
-        // XML文字列をDOMオブジェクトにパース
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlString, "text/xml");
         
-        // パースエラーのチェック
         if (xmlDoc.getElementsByTagName("parsererror").length > 0) {
-            throw new Error("XMLのパースに失敗しました");
+            throw new Error("XMLパースエラー");
         }
 
         const items = xmlDoc.getElementsByTagName("item");
@@ -211,11 +204,21 @@ async function fetchNews() {
         const maxItems = Math.min(4, items.length);
         for (let i = 0; i < maxItems; i++) {
             const title = items[i].getElementsByTagName("title")[0].textContent;
-            list.innerHTML += `<li>[主要] ${title}</li>`;
+            
+            // 日付・時間の取得と整形
+            const pubDateStr = items[i].getElementsByTagName("pubDate")[0].textContent;
+            const pubDate = new Date(pubDateStr);
+            const month = String(pubDate.getMonth() + 1).padStart(2, '0');
+            const date = String(pubDate.getDate()).padStart(2, '0');
+            const hours = String(pubDate.getHours()).padStart(2, '0');
+            const minutes = String(pubDate.getMinutes()).padStart(2, '0');
+            const timeHTML = `<span class="news-time">${month}/${date} ${hours}:${minutes}</span>`;
+
+            // [主要] の前に日時を挿入
+            list.innerHTML += `<li>${timeHTML}[主要] ${title}</li>`;
         }
     } catch (e) {
-        console.error("ニュース取得エラー。対策②の代替手段に切り替えます:", e);
-        // 対策②: 万が一CORSプロキシが全滅した場合、CORSなしで直接取れるパブリックなニュースJSON等にフォールバック
+        console.error("ニュース取得エラー:", e);
         fetchFallbackNews();
     }
 }
@@ -244,23 +247,80 @@ async function fetchFallbackNews() {
 }
 
 // --- SwitchBot API連携 (エアコン操作) ---
+// SwitchBot API v1.1 認証ヘッダーの生成とコマンド送信
 async function sendAirconCommand() {
-    const url = `https://api.switch-bot.com/v1.1/devices/${API_KEYS.switchbotDevice}/commands`;
-    const modeMap = { '冷房': 2, '暖房': 5, '除湿': 3, '自動': 1 };
-    
-    const body = {
-        "command": "setAll",
-        "parameter": `${airconState.temp},${modeMap[airconState.mode] || 1},${airconState.fan === '自動' ? 'auto' : airconState.fan},${airconState.power === 'on' ? 'on' : 'off'}`,
-        "commandType": "custom"
-    };
+    const statusText = document.getElementById("aircon-status-text");
+    statusText.textContent = `送信中... (${airconState.power.toUpperCase()} / ${airconState.temp}°C / ${airconState.mode})`;
 
-    // 本来はSwitchBot v1.1のシグネチャ生成認証が必要ですが、フロント単体で動かすため簡易リクエスト処理として記載
-    console.log("SwitchBotへの送信データ:", body);
-    document.getElementById("aircon-status-text").textContent = `送信中... (${airconState.power.toUpperCase()} / ${airconState.temp}°C / ${airconState.mode})`;
-    
-    // ※実機連携時は適切にヘッダー（Sign, Nonceなど）を設定してください
+    // APIキーが入力されていない場合はモック動作にする
+    if (!API_KEYS.switchbot || !API_KEYS.switchbotSecret || !API_KEYS.switchbotDevice) {
+        setTimeout(() => {
+            statusText.textContent = `運転状態: ${airconState.power === 'on' ? '運転中' : '停止中'} (デモモード)`;
+        }, 1000);
+        return;
+    }
+
+    try {
+        const token = API_KEYS.switchbot;
+        const secret = API_KEYS.switchbotSecret;
+        const deviceId = API_KEYS.switchbotDevice;
+        const t = Date.now();
+        const nonce = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+
+        // SwitchBot認証用の署名(Sign)作成
+        const data = token + t + nonce;
+        const encoder = new TextEncoder();
+        const keyData = encoder.encode(secret);
+        const msgData = encoder.encode(data);
+
+        const cryptoKey = await crypto.subtle.importKey(
+            "raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+        );
+        const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
+        const sign = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
+
+        // コマンドパラメータの組み立て
+        const modeMap = { '冷房': 2, '暖房': 5, '除湿': 3, '自動': 1 };
+        const fanMap = { '自動': 'auto', '1': 1, '2': 2, '3': 3 };
+        
+        const body = JSON.stringify({
+            "command": "setAll",
+            "parameter": `${airconState.temp},${modeMap[airconState.mode] || 1},${fanMap[airconState.fan] || 'auto'},${airconState.power === 'on' ? 'on' : 'off'}`,
+            "commandType": "custom"
+        });
+
+        // SwitchBot APIへのリクエスト送信 (CORS回避のためプロキシを経由させるのが安全です)
+        const targetUrl = `https://api.switch-bot.com/v1.1/devices/${deviceId}/commands`;
+        const proxyUrl = `https://api.yacdn.org/proxy?url=${encodeURIComponent(targetUrl)}`;
+
+        const response = await fetch(proxyUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": token,
+                "sign": sign,
+                "nonce": nonce,
+                "t": t.toString()
+            },
+            body: body
+        });
+
+        if (!response.ok) throw new Error("APIリクエストに失敗しました");
+        const resData = await response.json();
+
+        // 送信成功時の表示更新
+        statusText.textContent = `運転状態: ${airconState.power === 'on' ? '運転中' : '停止中'} (${airconState.mode} ${airconState.temp}°C)`;
+
+    } catch (error) {
+        console.error("SwitchBot通信エラー:", error);
+        statusText.textContent = "❌ 送信失敗 (設定または認証エラー)";
+        
+        // 3秒後に元の表示に戻す
+        setTimeout(() => {
+            statusText.textContent = `運転状態: --`;
+        }, 3000);
+    }
 }
-
 // --- 画面焼け対策（スクリーンセーバー） ---
 function resetIdleTimer() {
     clearTimeout(idleTimer);
